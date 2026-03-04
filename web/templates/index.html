@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APK QA Analyzer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #58a6ff;
+      font-size: 1.6rem;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #8b949e;
+      font-size: 0.85rem;
+      margin-bottom: 28px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* ── Upload Panel ── */
+    .panel {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .drop-zone {
+      border: 2px dashed #30363d;
+      border-radius: 6px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      color: #8b949e;
+      font-size: 0.9rem;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.drag-over {
+      border-color: #58a6ff;
+      background: #1c2128;
+      color: #c9d1d9;
+    }
+
+    .drop-zone.has-file {
+      border-color: #3fb950;
+      color: #3fb950;
+    }
+
+    .divider {
+      text-align: center;
+      color: #8b949e;
+      margin: 16px 0;
+      font-size: 0.8rem;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #c9d1d9;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #58a6ff;
+    }
+
+    button[type="submit"], .btn {
+      background: #238636;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 24px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      width: 100%;
+    }
+
+    button[type="submit"]:hover, .btn:hover {
+      background: #2ea043;
+    }
+
+    button[type="submit"]:disabled {
+      background: #30363d;
+      cursor: not-allowed;
+    }
+
+    /* ── Progress Section ── */
+    #progressSection {
+      display: none;
+    }
+
+    .spinner-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid #30363d;
+      border-top-color: #58a6ff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #currentStep {
+      color: #8b949e;
+      font-size: 0.85rem;
+    }
+
+    .progress-log {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 10px 12px;
+      font-size: 0.78rem;
+      color: #8b949e;
+      max-height: 180px;
+      overflow-y: auto;
+      line-height: 1.5;
+    }
+
+    /* ── Results Panel ── */
+    #resultsPanel {
+      display: none;
+    }
+
+    .risk-banner {
+      text-align: center;
+      padding: 16px;
+      border-radius: 6px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-bottom: 20px;
+      border: 2px solid transparent;
+    }
+
+    .risk-LOW    { background: #0f2d1a; border-color: #3fb950; color: #3fb950; }
+    .risk-MEDIUM { background: #2d1f00; border-color: #d29922; color: #d29922; }
+    .risk-HIGH   { background: #2d0f0f; border-color: #f85149; color: #f85149; }
+
+    .summary-box {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 14px 16px;
+      color: #c9d1d9;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .checks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .check-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 14px 16px;
+    }
+
+    .check-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .check-title {
+      font-weight: bold;
+      font-size: 0.88rem;
+      color: #c9d1d9;
+    }
+
+    .verdict-badge {
+      font-size: 0.75rem;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+
+    /* Verdict color classes */
+    .v-PASS         { background: #0f2d1a; color: #3fb950; border: 1px solid #3fb950; }
+    .v-NOT-DETECTED { background: #0f2d1a; color: #3fb950; border: 1px solid #3fb950; }
+    .v-LOW          { background: #0f2d1a; color: #3fb950; border: 1px solid #3fb950; }
+    .v-FOUND        { background: #0f2d1a; color: #3fb950; border: 1px solid #3fb950; }
+    .v-FLAG         { background: #2d1f00; color: #d29922; border: 1px solid #d29922; }
+    .v-MEDIUM       { background: #2d1f00; color: #d29922; border: 1px solid #d29922; }
+    .v-LIKELY-FOUND { background: #2d1f00; color: #d29922; border: 1px solid #d29922; }
+    .v-PERMISSION-ONLY { background: #2d1f00; color: #d29922; border: 1px solid #d29922; }
+    .v-DETECTED-LOW-RISK { background: #2d1f00; color: #d29922; border: 1px solid #d29922; }
+    .v-RISK         { background: #2d0f0f; color: #f85149; border: 1px solid #f85149; }
+    .v-HIGH         { background: #2d0f0f; color: #f85149; border: 1px solid #f85149; }
+    .v-NOT-FOUND    { background: #2d0f0f; color: #f85149; border: 1px solid #f85149; }
+    .v-DETECTED     { background: #2d0f0f; color: #f85149; border: 1px solid #f85149; }
+    .v-DETECTED-RISK { background: #2d0f0f; color: #f85149; border: 1px solid #f85149; }
+
+    .check-detail {
+      font-size: 0.82rem;
+      color: #8b949e;
+      line-height: 1.5;
+    }
+
+    .check-detail a {
+      color: #58a6ff;
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .check-detail a:hover {
+      text-decoration: underline;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .meta-tag {
+      background: #1c2128;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      color: #8b949e;
+    }
+
+    .meta-tag.highlight {
+      color: #c9d1d9;
+    }
+
+    #resetBtn {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 10px 24px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.2s;
+      margin-top: 4px;
+    }
+
+    #resetBtn:hover {
+      background: #30363d;
+    }
+
+    /* ── Error State ── */
+    .error-box {
+      background: #2d0f0f;
+      border: 1px solid #f85149;
+      border-radius: 6px;
+      padding: 14px 16px;
+      color: #f85149;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>APK QA Analyzer</h1>
+  <p class="subtitle">Automated Android APK quality assurance — powered by Claude AI</p>
+
+  <!-- Upload Panel -->
+  <div class="panel" id="uploadPanel">
+    <form id="uploadForm">
+      <div class="drop-zone" id="dropZone">
+        Drop <strong>.apk</strong> file here, or click to browse
+        <input type="file" id="fileInput" accept=".apk" style="display:none">
+      </div>
+
+      <div class="divider">— or enter a server-side file path —</div>
+
+      <input
+        type="text"
+        id="apkPath"
+        placeholder="/path/to/app.apk"
+        autocomplete="off"
+        spellcheck="false"
+      >
+
+      <button type="submit" id="analyzeBtn">Analyze APK</button>
+    </form>
+  </div>
+
+  <!-- Progress Section -->
+  <div class="panel" id="progressSection">
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      <div id="currentStep">Initializing analysis...</div>
+    </div>
+    <div class="progress-log" id="progressLog"></div>
+  </div>
+
+  <!-- Results Panel -->
+  <div id="resultsPanel">
+    <div id="riskBanner" class="risk-banner"></div>
+    <div class="panel summary-box" id="summaryBox"></div>
+    <div class="checks-grid" id="checksGrid"></div>
+    <button id="resetBtn">Analyze Another APK</button>
+  </div>
+</div>
+
+<script>
+  // ── DOM refs ──
+  const uploadPanel    = document.getElementById('uploadPanel');
+  const progressSection= document.getElementById('progressSection');
+  const resultsPanel   = document.getElementById('resultsPanel');
+  const progressLog    = document.getElementById('progressLog');
+  const currentStep    = document.getElementById('currentStep');
+  const dropZone       = document.getElementById('dropZone');
+  const fileInput      = document.getElementById('fileInput');
+  const apkPathInput   = document.getElementById('apkPath');
+  const uploadForm     = document.getElementById('uploadForm');
+  const analyzeBtn     = document.getElementById('analyzeBtn');
+  const resetBtn       = document.getElementById('resetBtn');
+
+  let selectedFile = null;
+
+  // ── Drag-and-drop ──
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) setSelectedFile(f);
+  });
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('drag-over');
+  });
+
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) setSelectedFile(f);
+  });
+
+  function setSelectedFile(f) {
+    selectedFile = f;
+    dropZone.textContent = `Selected: ${f.name}  (${(f.size / 1048576).toFixed(1)} MB)`;
+    dropZone.classList.add('has-file');
+    apkPathInput.value = '';
+  }
+
+  // ── Form submit ──
+  uploadForm.addEventListener('submit', async e => {
+    e.preventDefault();
+
+    const pathValue = apkPathInput.value.trim();
+    if (!selectedFile && !pathValue) {
+      alert('Please select an APK file or enter a file path.');
+      return;
+    }
+
+    const formData = new FormData();
+    if (selectedFile) {
+      formData.append('apk_file', selectedFile);
+    } else {
+      formData.append('apk_path', pathValue);
+    }
+
+    // Switch to progress view
+    uploadPanel.style.display = 'none';
+    progressSection.style.display = 'block';
+    resultsPanel.style.display = 'none';
+    progressLog.innerHTML = '';
+    currentStep.textContent = 'Starting...';
+    analyzeBtn.disabled = true;
+
+    try {
+      const response = await fetch('/analyze', { method: 'POST', body: formData });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: response.statusText }));
+        showError(err.error || 'Request failed');
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE frames are separated by double newlines
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop();   // keep incomplete tail
+
+        for (const frame of frames) {
+          const line = frame.trim();
+          if (line.startsWith('data: ')) {
+            try {
+              const evt = JSON.parse(line.slice(6));
+              handleEvent(evt);
+            } catch (_) { /* ignore malformed frames */ }
+          }
+        }
+      }
+    } catch (err) {
+      showError(String(err));
+    } finally {
+      analyzeBtn.disabled = false;
+    }
+  });
+
+  function handleEvent(evt) {
+    if (evt.type === 'progress') {
+      currentStep.textContent = evt.msg;
+      const line = document.createElement('div');
+      line.textContent = evt.msg;
+      progressLog.appendChild(line);
+      progressLog.scrollTop = progressLog.scrollHeight;
+
+    } else if (evt.type === 'complete') {
+      progressSection.style.display = 'none';
+      renderResults(evt.verdict);
+      resultsPanel.style.display = 'block';
+
+    } else if (evt.type === 'error') {
+      showError(evt.msg);
+    }
+  }
+
+  function showError(msg) {
+    progressSection.style.display = 'none';
+    uploadPanel.style.display = 'block';
+
+    // Show error in upload panel temporarily
+    const existing = document.getElementById('errorBox');
+    if (existing) existing.remove();
+
+    const box = document.createElement('div');
+    box.id = 'errorBox';
+    box.className = 'error-box';
+    box.style.marginTop = '12px';
+    box.textContent = 'Error: ' + msg;
+    uploadPanel.querySelector('.panel') ? uploadPanel.appendChild(box) : uploadPanel.append(box);
+  }
+
+  // ── Results rendering ──
+  function verdictClass(v) {
+    if (!v) return '';
+    // Normalise: uppercase, replace spaces with dashes
+    return 'v-' + String(v).toUpperCase().replace(/\s+/g, '-');
+  }
+
+  function riskClass(r) {
+    const upper = String(r || '').toUpperCase();
+    if (upper === 'LOW')    return 'risk-LOW';
+    if (upper === 'MEDIUM') return 'risk-MEDIUM';
+    if (upper === 'HIGH' || upper === 'CRITICAL') return 'risk-HIGH';
+    return 'risk-MEDIUM';
+  }
+
+  function renderResults(verdict) {
+    // Risk banner
+    const risk = verdict.overall_risk || 'UNKNOWN';
+    const banner = document.getElementById('riskBanner');
+    banner.className = `risk-banner ${riskClass(risk)}`;
+    banner.textContent = `Overall Risk: ${risk}`;
+
+    // Summary
+    document.getElementById('summaryBox').textContent =
+      verdict.summary || 'No summary available.';
+
+    // Check cards
+    const grid = document.getElementById('checksGrid');
+    grid.innerHTML = '';
+
+    const checks = [
+      { key: 'apk_size',             label: 'APK Size',             icon: '📦' },
+      { key: 'privacy_policy',       label: 'Privacy Policy',       icon: '🔏' },
+      { key: 'terms_and_conditions', label: 'Terms & Conditions',   icon: '📄' },
+      { key: 'data_collected',       label: 'Data Collection',      icon: '📊' },
+      { key: 'wake_lock',            label: 'Wake Lock',            icon: '🔋' },
+      { key: 'play_integrity',       label: 'Play Integrity',       icon: '🛡️' },
+    ];
+
+    for (const { key, label, icon } of checks) {
+      const data = verdict[key] || {};
+      const v = data.verdict || 'N/A';
+      const note = data.note || data.detail || '';
+
+      // Build extra metadata rows
+      const metas = [];
+
+      if (key === 'apk_size') {
+        if (data.size_mb !== undefined) metas.push({ label: `${data.size_mb} MB`, hi: true });
+      }
+
+      if (key === 'privacy_policy' || key === 'terms_and_conditions') {
+        if (data.url) {
+          metas.push({ label: 'URL', url: data.url });
+        }
+        if (data.accessible_in_app !== undefined) {
+          metas.push({ label: `In-app: ${data.accessible_in_app}` });
+        }
+      }
+
+      if (key === 'data_collected') {
+        const cats = data.categories || [];
+        if (cats.length) {
+          cats.forEach(c => metas.push({ label: c }));
+        }
+      }
+
+      if (key === 'wake_lock') {
+        if (data.permission_declared !== undefined) {
+          metas.push({ label: `Permission: ${data.permission_declared}` });
+        }
+        if (data.active_usage_found !== undefined) {
+          metas.push({ label: `Active usage: ${data.active_usage_found}`, hi: !!data.active_usage_found });
+        }
+        if (data.lock_types && data.lock_types.length) {
+          metas.push({ label: data.lock_types.join(', ') });
+        }
+        if (data.timeout_ms != null) {
+          metas.push({ label: `Timeout: ${data.timeout_ms} ms` });
+        }
+      }
+
+      if (key === 'play_integrity') {
+        [
+          ['Integrity API', data.uses_integrity_api],
+          ['pairip', data.uses_auto_protection_pairip],
+          ['Firebase AppCheck', data.uses_firebase_appcheck],
+          ['Play Store redirect', data.forces_play_store_redirect],
+        ].forEach(([name, val]) => {
+          if (val !== undefined) {
+            metas.push({ label: `${name}: ${val}`, hi: val === true });
+          }
+        });
+      }
+
+      // Render meta tags
+      let metaHtml = '';
+      if (metas.length) {
+        metaHtml = '<div class="meta-row">';
+        for (const m of metas) {
+          if (m.url) {
+            metaHtml += `<span class="meta-tag highlight"><a href="${escHtml(m.url)}" target="_blank" rel="noopener">${escHtml(m.url.length > 50 ? m.url.slice(0, 50) + '…' : m.url)}</a></span>`;
+          } else {
+            metaHtml += `<span class="meta-tag ${m.hi ? 'highlight' : ''}">${escHtml(String(m.label))}</span>`;
+          }
+        }
+        metaHtml += '</div>';
+      }
+
+      grid.innerHTML += `
+        <div class="check-card">
+          <div class="check-card-header">
+            <span class="check-title">${icon} ${label}</span>
+            <span class="verdict-badge ${verdictClass(v)}">${escHtml(v)}</span>
+          </div>
+          <div class="check-detail">${escHtml(note)}${metaHtml}</div>
+        </div>`;
+    }
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Reset button ──
+  resetBtn.addEventListener('click', () => {
+    resultsPanel.style.display = 'none';
+    uploadPanel.style.display = 'block';
+    selectedFile = null;
+    fileInput.value = '';
+    apkPathInput.value = '';
+    dropZone.textContent = 'Drop .apk file here, or click to browse';
+    dropZone.classList.remove('has-file');
+    const errBox = document.getElementById('errorBox');
+    if (errBox) errBox.remove();
+  });
+</script>
+</body>
+</html>

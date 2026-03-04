@@ -1,0 +1,4 @@
+anthropic
+flask
+requests
+# androguard - optional, not required (smali analysis uses grep instead)
