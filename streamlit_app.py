@@ -269,15 +269,15 @@ def main():
     if st.session_state.verdict is None:
         st.subheader("Upload an APK")
 
-        tab_upload, tab_path = st.tabs(["📁 File Upload", "🗂️ Server-side Path"])
-
-        # Shared option: skip AI analysis
+        # Shared option: skip AI analysis (must be above st.tabs())
         skip_ai = not api_key or st.checkbox(
             "Skip AI analysis (raw findings only — no API key needed)",
             value=not api_key,
             disabled=not api_key,
             help="Runs checks 1–5 locally and shows raw grep results. No Claude API call is made.",
         )
+
+        tab_upload, tab_path = st.tabs(["📁 File Upload", "🗂️ Server-side Path"])
 
         with tab_upload:
             uploaded = st.file_uploader(
