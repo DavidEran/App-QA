@@ -59,29 +59,58 @@ def render_verdict_badge(v: str) -> str:
     return f":red[**{v}**]"
 
 
-def _assemble_findings(apk_path, size_info, perm_info, integrity_info, privacy_info, policy_text):
-    return {
-        "apk_path": apk_path,
-        "apk_size_bytes": size_info["size_bytes"],
-        "apk_size_mb": size_info["size_mb"],
-        "permissions": perm_info.get("permissions", []),
-        "wakelock_code_hits": perm_info.get("wakelock_code_hits", []),
-        "wakelock_xml_hits": perm_info.get("wakelock_xml_hits", []),
-        "play_integrity_hits": integrity_info.get("play_integrity_hits", []),
-        "firebase_appcheck_hits": integrity_info.get("firebase_appcheck_hits", []),
-        "pairip_hits": integrity_info.get("pairip_hits", []),
-        "licensing_hits": integrity_info.get("licensing_hits", []),
-        "play_xml_hits": integrity_info.get("play_xml_hits", []),
-        "privacy_strings": privacy_info.get("privacy_strings", []),
-        "privacy_urls": privacy_info.get("privacy_urls", []),
-        "terms_strings": privacy_info.get("terms_strings", []),
-        "manifest_hits": privacy_info.get("manifest_hits", []),
-        "privacy_policy_text": policy_text,
-    }
+def render_raw_findings(findings: dict):
+    """Display raw findings when AI analysis is skipped."""
+    sz = findings.get("apk_size_mb", "?")
+    st.markdown(f"### 📦 APK Size: **{sz} MB** {'🚩 Large APK' if sz and sz > 100 else ''}")
+
+    perms = findings.get("permissions", [])
+    st.markdown(f"### 🔍 Permissions ({len(perms)})")
+    if perms:
+        st.code("\n".join(sorted(perms)))
+    else:
+        st.caption("None found (aapt may not be installed)")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        wl = findings.get("wakelock_code_hits", [])
+        st.markdown(f"### 🔋 Wake Lock hits ({len(wl)})")
+        if wl:
+            st.code("\n".join(wl[:15]))
+        else:
+            st.caption("No wake lock code found")
+
+        pi = findings.get("play_integrity_hits", [])
+        pairip = findings.get("pairip_hits", [])
+        ac = findings.get("firebase_appcheck_hits", [])
+        st.markdown(f"### 🛡️ Play Integrity hits ({len(pi)}) · pairip ({len(pairip)}) · AppCheck ({len(ac)})")
+        for label, hits in [("Integrity API", pi), ("pairip", pairip), ("Firebase AppCheck", ac)]:
+            if hits:
+                with st.expander(f"{label} ({len(hits)} hits)"):
+                    st.code("\n".join(hits[:10]))
+
+    with col2:
+        urls = findings.get("privacy_urls", [])
+        st.markdown(f"### 🔏 Privacy / Terms URLs ({len(urls)})")
+        if urls:
+            for u in urls:
+                st.markdown(f"- [{u}]({u})")
+        else:
+            st.caption("No policy URLs detected")
+
+        ps = findings.get("privacy_strings", [])
+        st.markdown(f"### 📄 Privacy strings in resources ({len(ps)})")
+        if ps:
+            with st.expander("Show strings"):
+                st.code("\n".join(ps[:20]))
+
+    with st.expander("Full raw findings JSON"):
+        st.json(findings)
 
 
-def run_analysis(apk_path: str) -> dict:
-    """Run all 6 checks and Claude API call, updating Streamlit status live."""
+def run_analysis(apk_path: str, skip_ai: bool = False) -> dict:
+    """Run all checks. If skip_ai=True, return raw findings without calling Claude API."""
     with st.status("Analyzing APK…", expanded=True) as status:
         st.write("📦 **Step 1/6** — Checking APK size…")
         size_info = qa.check_apk_size(apk_path)
@@ -119,10 +148,15 @@ def run_analysis(apk_path: str) -> dict:
         else:
             st.write("📥 **Step 6/6** — No policy URL to fetch")
 
-        st.write("🤖 **Calling Claude API** for structured analysis…")
-        findings = _assemble_findings(
+        findings = qa.assemble_findings(
             apk_path, size_info, perm_info, integrity_info, privacy_info, policy_text
         )
+
+        if skip_ai:
+            status.update(label="✅ Raw scan complete (no AI analysis)", state="complete", expanded=False)
+            return {"__raw__": True, "findings": findings}
+
+        st.write("🤖 **Calling Claude API** for structured analysis…")
         verdict = qa.call_claude_api(findings)
         status.update(label="✅ Analysis complete!", state="complete", expanded=False)
 
@@ -219,8 +253,9 @@ def main():
         os.environ["ANTHROPIC_API_KEY"] = api_key
     else:
         st.warning(
-            "⚠️ `ANTHROPIC_API_KEY` not set. "
-            "Add it to `.streamlit/secrets.toml` or as an environment variable.",
+            "⚠️ `ANTHROPIC_API_KEY` not set — AI analysis is disabled. "
+            "You can still run a **raw scan** (checks 1–5) without it. "
+            "To enable AI verdicts, add the key to `.streamlit/secrets.toml` or set it as an environment variable.",
             icon="🔑",
         )
 
@@ -236,19 +271,27 @@ def main():
 
         tab_upload, tab_path = st.tabs(["📁 File Upload", "🗂️ Server-side Path"])
 
+        # Shared option: skip AI analysis
+        skip_ai = not api_key or st.checkbox(
+            "Skip AI analysis (raw findings only — no API key needed)",
+            value=not api_key,
+            disabled=not api_key,
+            help="Runs checks 1–5 locally and shows raw grep results. No Claude API call is made.",
+        )
+
         with tab_upload:
             uploaded = st.file_uploader(
                 "Drop your .apk here",
                 type=["apk"],
                 help="Max 250 MB",
             )
-            if uploaded and st.button("Analyze", key="btn_upload", type="primary", disabled=not api_key):
+            if uploaded and st.button("Analyze", key="btn_upload", type="primary"):
                 with tempfile.NamedTemporaryFile(suffix=".apk", delete=False) as tmp:
                     tmp.write(uploaded.read())
                     tmp_path = tmp.name
                 try:
                     st.session_state.apk_name = uploaded.name
-                    st.session_state.verdict = run_analysis(tmp_path)
+                    st.session_state.verdict = run_analysis(tmp_path, skip_ai=skip_ai)
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Analysis failed: {exc}")
@@ -263,13 +306,13 @@ def main():
                 "APK file path (server-side)",
                 placeholder="/path/to/app.apk",
             )
-            if st.button("Analyze", key="btn_path", type="primary", disabled=not (api_key and path_val)):
+            if st.button("Analyze", key="btn_path", type="primary", disabled=not path_val):
                 if not os.path.isfile(path_val):
                     st.error(f"File not found: {path_val}")
                 else:
                     try:
                         st.session_state.apk_name = os.path.basename(path_val)
-                        st.session_state.verdict = run_analysis(path_val)
+                        st.session_state.verdict = run_analysis(path_val, skip_ai=skip_ai)
                         st.rerun()
                     except Exception as exc:
                         st.error(f"Analysis failed: {exc}")
@@ -282,7 +325,11 @@ def main():
             st.session_state.apk_name = None
             st.rerun()
 
-        render_results(st.session_state.verdict)
+        v = st.session_state.verdict
+        if v.get("__raw__"):
+            render_raw_findings(v["findings"])
+        else:
+            render_results(v)
 
 
 if __name__ == "__main__":

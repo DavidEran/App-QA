@@ -546,7 +546,55 @@ def main(apk_path):
         policy_text = fetch_policy_text(privacy_urls[0])
 
     # Assemble findings
-    findings = {
+    findings = assemble_findings(apk_path, size_info, perm_info, integrity_info, privacy_info, policy_text)
+
+    # AI Analysis
+    print("[AI] Calling Claude API for analysis...", file=sys.stderr)
+    verdict = call_claude_api(findings)
+
+    # Output JSON verdict (machine-readable)
+    print(json.dumps(verdict, indent=2))
+
+    # Output formatted report (human-readable)
+    print("\n" + format_report(verdict), file=sys.stderr)
+
+    return verdict
+
+
+def main_raw(apk_path):
+    """Run all checks and return raw findings JSON without calling the Claude API."""
+    if not os.path.isfile(apk_path):
+        print(json.dumps({"error": f"APK file not found: {apk_path}"}))
+        sys.exit(1)
+
+    print(f"[*] Analyzing APK (raw mode): {apk_path}", file=sys.stderr)
+
+    print("[1/5] Checking APK size...", file=sys.stderr)
+    size_info = check_apk_size(apk_path)
+
+    print("[2/5] Decompiling APK...", file=sys.stderr)
+    decompile = check_decompile(apk_path)
+
+    print("[3/5] Checking permissions and wake lock...", file=sys.stderr)
+    perm_info = check_permissions_wakelock(apk_path, decompile)
+
+    print("[4/5] Checking Play Integrity API usage...", file=sys.stderr)
+    integrity_info = check_play_integrity(decompile)
+
+    print("[5/5] Detecting privacy policy & terms...", file=sys.stderr)
+    privacy_info = check_privacy_policy(decompile)
+
+    privacy_urls = privacy_info.get("privacy_urls", [])
+    policy_text = fetch_policy_text(privacy_urls[0]) if privacy_urls else ""
+
+    findings = assemble_findings(apk_path, size_info, perm_info, integrity_info, privacy_info, policy_text)
+    print(json.dumps(findings, indent=2))
+    return findings
+
+
+def assemble_findings(apk_path, size_info, perm_info, integrity_info, privacy_info, policy_text):
+    """Build the findings dict passed to the Claude API (or returned in raw mode)."""
+    return {
         "apk_path": apk_path,
         "apk_size_bytes": size_info["size_bytes"],
         "apk_size_mb": size_info["size_mb"],
@@ -565,21 +613,15 @@ def main(apk_path):
         "privacy_policy_text": policy_text,
     }
 
-    # AI Analysis
-    print("[AI] Calling Claude API for analysis...", file=sys.stderr)
-    verdict = call_claude_api(findings)
-
-    # Output JSON verdict (machine-readable)
-    print(json.dumps(verdict, indent=2))
-
-    # Output formatted report (human-readable)
-    print("\n" + format_report(verdict), file=sys.stderr)
-
-    return verdict
-
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 apk_qa_agent.py <path_to_apk>", file=sys.stderr)
-        sys.exit(1)
-    main(sys.argv[1])
+    import argparse
+    parser = argparse.ArgumentParser(description="APK QA Agent")
+    parser.add_argument("apk", help="Path to the APK file")
+    parser.add_argument("--raw", action="store_true", help="Output raw findings only (no Claude API call)")
+    args = parser.parse_args()
+
+    if args.raw:
+        main_raw(args.apk)
+    else:
+        main(args.apk)
