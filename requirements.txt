@@ -1,4 +1,5 @@
 anthropic
 flask
 requests
+streamlit
 # androguard - optional, not required (smali analysis uses grep instead)

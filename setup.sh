@@ -4,7 +4,7 @@ set -e
 
 echo "=== Installing Python packages ==="
 # Note: --ignore-installed blinker handles a Debian/Ubuntu package conflict
-pip install anthropic flask requests --break-system-packages --ignore-installed blinker
+pip install anthropic flask requests streamlit --break-system-packages --ignore-installed blinker
 
 echo "=== Installing system tools ==="
 apt-get install -y apktool aapt 2>/dev/null || echo "Warning: apt-get failed (may need sudo or tools may already be installed)"
